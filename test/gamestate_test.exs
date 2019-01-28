@@ -1,3 +1,19 @@
+defmodule GameStateTest.DispatchTest do
+  use GenServer
+
+  def start_link(output) do
+    GenServer.start_link(__MODULE__, output)
+  end
+
+  def init(output) do
+    {:ok, output}
+  end
+
+  def handle_call({:handle_card, _, _}, _, output) do
+    {:reply, output, output}
+  end
+end
+
 defmodule GameStateTest do
   use ExUnit.Case
   doctest GameState
@@ -68,34 +84,51 @@ defmodule GameStateTest do
     assert %{play_area: [], discard: [%{name: :card1, data: 4}]} == GameState.card_finished(state)
   end
 
-  test "draw card card and game tick" do
-    state = %{current: 0,
-              players: %{0 => %{hand: []}},
-              deck: [:card1, :card2],
-              play_area: [%{name: :draw}],
-              discard: []
-             }
+  describe "card dispatch" do
+    setup do
+      state1 = %{current: 0,
+                 players: %{0 => %{hand: []}},
+                 deck: [:card1, :card2],
+                 play_area: [%{name: :draw}],
+                 discard: []
+                }
 
-    {:ok, state2} = GameState.tick(state)
-
-    assert %{state | players: %{0 => %{hand: [:card1]}},
-             deck: [:card2],
-             play_area: [],
-             discard: [%{name: :draw}]
-    } == state2
-  end
-
-  test "nonexistant card" do
-    state = %{current: 0,
-              players: %{0 => %{hand: []}},
-              deck: [:card1, :card2],
-              play_area: [nil],
-              discard: []
-             }
-
-    assert_raise FunctionClauseError, fn ->
-      GameState.tick(state, DefaultCards)
+      state2 = %{state1 | players: %{0 => %{hand: [:card1]}},
+                 deck: [:card2],
+                 play_area: [],
+                 discard: [%{name: :draw}]
+                }
+      {:ok, %{state1: state1, state2: state2}}
     end
+
+    test "default dispatch", %{state1: state1, state2: state2} do
+
+      {:ok, end_state} = GameState.tick(state1)
+
+      assert state2 == end_state
+    end
+
+    test "nonexistant card", %{state1: state1} do
+      state = %{state1 | play_area: [nil]}
+
+      assert_raise FunctionClauseError, fn ->
+        GameState.tick(state, DefaultCards)
+      end
+    end
+
+    test "raw function dispatch", %{state1: state1, state2: state2} do
+      assert {:ok, state2} == GameState.tick(state1, fn _, _ -> state2 end)
+    end
+    
+    test "module function tuple dispatch", %{state1: state1, state2: state2} do
+      assert {:ok, state2} == GameState.tick(state1, {DefaultCards, :handle_card})
+    end
+
+    test "genserver dispatch", %{state1: state1, state2: state2} do
+      {:ok, pid} = GameStateTest.DispatchTest.start_link(state2)
+      assert {:ok, state2} == GameState.tick(state1, pid)
+    end
+
   end
 
 end

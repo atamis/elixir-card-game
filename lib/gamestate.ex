@@ -100,6 +100,10 @@ defmodule GameState do
     GenServer.call(dispatch, {:handle_card, state, card})
   end
 
+  def card_dispatch(state, card, {module, func}) when is_atom(module) and is_atom(func) do
+    :erlang.apply(module, func, [state, card])
+  end
+
   defp push(lst, item), do: List.insert_at(lst, 0, item)
   defp pop(lst), do: List.pop_at(lst, 0)
 
