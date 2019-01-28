@@ -63,16 +63,16 @@ defmodule GameStateTest do
   end
 
   test "card finished" do
-    state = %{play_area: [%{dispatch: :card1, data: 4}], discard: []}
+    state = %{play_area: [%{name: :card1, data: 4}], discard: []}
 
-    assert %{play_area: [], discard: [%{dispatch: :card1, data: 4}]} == GameState.card_finished(state)
+    assert %{play_area: [], discard: [%{name: :card1, data: 4}]} == GameState.card_finished(state)
   end
 
   test "draw card card and game tick" do
     state = %{current: 0,
               players: %{0 => %{hand: []}},
               deck: [:card1, :card2],
-              play_area: [%{dispatch: :draw}],
+              play_area: [%{name: :draw}],
               discard: []
              }
 
@@ -81,8 +81,21 @@ defmodule GameStateTest do
     assert %{state | players: %{0 => %{hand: [:card1]}},
              deck: [:card2],
              play_area: [],
-             discard: [%{dispatch: :draw}]
+             discard: [%{name: :draw}]
     } == state2
+  end
+
+  test "nonexistant card" do
+    state = %{current: 0,
+              players: %{0 => %{hand: []}},
+              deck: [:card1, :card2],
+              play_area: [nil],
+              discard: []
+             }
+
+    assert_raise FunctionClauseError, fn ->
+      GameState.tick(state, DefaultCards)
+    end
   end
 
 end

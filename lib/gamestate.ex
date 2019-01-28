@@ -19,26 +19,30 @@ defmodule GameState do
 
   def nth_player_lens(n), do: @players ++ [n]
 
+  def tick(state) do
+    tick(state, DefaultCards)
+  end
+
   @doc """
   Executes a "game tick", returning `{:ok, state}` normally,
   `{:ok, state, :ready}` if the state is ready for the next
   play, and `{:ok, state, :requires_play}` if the player needs to
   play a card (see tick/2)
   """
-  def tick(%{play_area: []} = state) do
+  def tick(%{play_area: []} = state, _) do
     {:ok, state, :ready}
   end
 
-  def tick(state) do
+  def tick(state, dispatch) do
     case Lens.view(state, @topplay) do
       :requires_play -> {:ok, state, :requires_play}
-      card -> {:ok, card_dispatch(card).(state)}
+      card -> {:ok, card_dispatch(state, card, dispatch)}
     end
   end
 
-  def tick(%{play_area: [:requires_play | _]} = state, card) do
+  def tick(%{play_area: [:requires_play | _]} = state, card, dispatch) do
     state = Lens.set(state, @topplay, card)
-    tick(state)
+    tick(state, dispatch)
   end
 
   @doc """
@@ -84,19 +88,29 @@ defmodule GameState do
 
   #require IEx; IEx.pry()
 
-  def card_dispatch(%{dispatch: :draw}) do
-    fn state ->
-      {state, card} = draw_card(state)
+  def card_dispatch(state, card, dispatch) when is_function(dispatch) do
+    dispatch.(state, card)
+  end
 
+  def card_dispatch(state, card, dispatch) when is_atom(dispatch) do
+    :erlang.apply(dispatch, :handle_card, [state, card])
+  end
 
-      state
-      |> Lens.map(@current_player ++ [:hand], &(push(&1, card)))
-      |> card_finished()
-    end
+  def card_dispatch(state, card, dispatch) when is_pid(dispatch) do
+    GenServer.call(dispatch, {:handle_card, state, card})
   end
 
   defp push(lst, item), do: List.insert_at(lst, 0, item)
   defp pop(lst), do: List.pop_at(lst, 0)
 
+end
+
+defmodule MalformedStateError do
+  defexception [:message]
+
+  @impl true
+  def exception(state) do
+    %MalformedStateError{message: "Encountered malformed game state, #{inspect(state)}"}
+  end
 end
 
