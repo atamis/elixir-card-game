@@ -13,6 +13,10 @@ defmodule Proxy do
     GenServer.call(pid, {:send, to, msg})
   end
 
+  def exec(pid, fun) do
+    GenServer.call(pid, {:exec, fun})
+  end
+
   def init(forward) do
     {:ok, forward}
   end
@@ -26,8 +30,14 @@ defmodule Proxy do
     {:reply, :ok, forward}
   end
 
+  def handle_call({:exec, fun}, _from, forward) do
+    fun.()
+    {:reply, {:ok, fun.()}, forward}
+  end
+
   def handle_info(msg, forward) do
     send(forward, {:proxy, self(), msg})
     {:noreply, forward}
   end
+
 end

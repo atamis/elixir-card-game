@@ -16,8 +16,32 @@ defmodule GameState do
   @topdeck @deck ++ [0]
   @topplay [:play_area, 0]
   @current_player @players ++ [{:dynamic, :current}]
+  @hand_size 5
 
   def nth_player_lens(n), do: @players ++ [n]
+
+  def new_game(num_players, deck, hand_size \\ @hand_size) do
+    deck = Enum.shuffle(deck)
+    all_hands = Enum.chunk_every(deck, hand_size)
+
+    {player_hands, remaining} = Enum.split(all_hands, num_players)
+
+    remaining_deck = List.flatten(remaining)
+
+    players = player_hands
+    |> Enum.map(fn hand -> %{hand: hand} end)
+    |> Enum.with_index()
+    |> Enum.map(fn {a, b} -> {b, a} end)
+    |> Enum.into(%{})
+
+    %{current: 0,
+      num_players: num_players,
+      discard: [],
+      deck: remaining_deck,
+      players: players,
+      play_area: []
+    }
+  end
 
   def tick(state) do
     tick(state, DefaultCards)
