@@ -45,14 +45,16 @@ defmodule GameServerTest do
   end
 
   test "premature starting" do
-    {:ok, pid} = GameServer.start_link()
-    assert :ok = GameServer.join(pid)
+    {:ok, sup} = GameServer.Supervisor.start_link([])
+    server = GameServer.Supervisor.get_game(sup)
+    assert :ok = GameServer.join(server)
 
-    assert {:error, _} = GameServer.begin(pid)
+    assert {:error, _} = GameServer.begin(server)
   end
 
   test "starting the game" do
-    {:ok, server} = GameServer.start_link()
+    {:ok, sup} = GameServer.Supervisor.start_link([])
+    server = GameServer.Supervisor.get_game(sup)
     {:ok, proxy} = Proxy.start_link(self())
 
     assert :ok = GameServer.join(server)
