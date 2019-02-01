@@ -64,4 +64,30 @@ defmodule EventBusTest do
     assert not Process.alive?(bus)
     assert not Process.alive?(proxy)
   end
+
+
+  test "legacy combo test" do
+    {:ok, bus} = EventBus.start_link([nil])
+
+    EventBus.subscribe(bus)
+
+    EventBus.notify(bus, :message)
+
+    assert_receive(:message)
+
+    {:ok, proxy} = Proxy.start_link(self())
+
+    EventBus.subscribe(bus, proxy)
+
+    EventBus.notify(bus, :message)
+
+    assert_receive(:message)
+    assert_receive({:proxy, ^proxy, :message})
+
+    Process.exit(proxy, :normal)
+
+    EventBus.notify(bus, :message)
+
+    assert_receive(:message)
+  end
 end
