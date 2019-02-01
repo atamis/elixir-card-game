@@ -74,7 +74,7 @@ defmodule BusPrinter do
 end
 
 defmodule BusProxy do
-  @behavior :gen_event
+  @behaviour :gen_event
 
   def init(forward) do
     {:ok, forward}

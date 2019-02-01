@@ -66,10 +66,9 @@ defmodule GameServerTest do
     me = self()
 
     assert_receive({:game_begin, ^me, index1})
-    assert_receive({:proxy, proxy, {:game_begin, proxy, index2}})
+    assert_receive({:proxy, ^proxy, {:game_begin, ^proxy, index2}})
 
     assert index1 != index2
-
   end
 end
 
