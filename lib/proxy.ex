@@ -5,7 +5,11 @@ defmodule Proxy do
     GenServer.start_link(__MODULE__, forward)
   end
 
-  def terminate(pid) do
+  def start(forward) do
+    GenServer.start(__MODULE__, forward)
+  end
+
+  def stop(pid) do
     GenServer.call(pid, :stop)
   end
 
@@ -21,8 +25,8 @@ defmodule Proxy do
     {:ok, forward}
   end
 
-  def handle_call(:stop, _from, _) do
-    {:terminate, :ok}
+  def handle_call(:stop, _from, forward) do
+    {:stop, :shutdown, :ok, forward}
   end
 
   def handle_call({:send, to, msg}, _from, forward) do
