@@ -44,6 +44,12 @@ defmodule GameServerTest do
     assert_receive({:proxy, pid, :test})
   end
 
+  test "nil proxy" do
+    {:ok, pid} = Proxy.start_link(nil)
+    send(pid, :test)
+    refute_receive({:proxy, _, _})
+  end
+
   test "premature starting" do
     {:ok, sup} = GameServer.Supervisor.start_link([])
     server = GameServer.Supervisor.get_game(sup)

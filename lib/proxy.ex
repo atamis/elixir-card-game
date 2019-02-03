@@ -14,6 +14,9 @@ defmodule Proxy do
 
   It additionally supports "remote control" message sending, and local
   function execution.
+
+  If `forward` is `nil`, the proxy will not send messages (by default,
+  this is an error.)
   """
 
   @doc """
@@ -73,7 +76,9 @@ defmodule Proxy do
   end
 
   def handle_info(msg, forward) do
-    send(forward, {:proxy, self(), msg})
+    if forward do
+      send(forward, {:proxy, self(), msg})
+    end
     {:noreply, forward}
   end
 
