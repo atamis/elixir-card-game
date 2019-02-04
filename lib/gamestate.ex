@@ -1,5 +1,6 @@
 defmodule GameState do
   import Lens
+  require Util
 
   @empty_state %{players: %{},
                  current: %{},

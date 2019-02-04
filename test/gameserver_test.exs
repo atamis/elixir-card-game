@@ -5,21 +5,51 @@ defmodule GameServerTest do
   import GameServer
   require Util
 
+  setup context do
+
+    opts = Util.cond_put context[:bus], %{} do
+      {:ok, bus} = EventBus.start_link()
+      %{bus: bus}
+    end
+
+    opts = Util.cond_put(context[:server], opts) do
+      {:ok, sup} = GameServer.Supervisor.start_link([])
+      server = GameServer.Supervisor.get_game(sup)
+      bus = GameServer.Supervisor.get_bus(sup)
+      %{server: server, bus: bus, sup: sup}
+    end
+
+    opts = Util.cond_put opts[:bus] && context[:proxy], opts do
+      {:ok, proxy} = Proxy.start_link(self())
+      EventBus.subscribe(opts[:bus], proxy)
+      %{proxy: proxy}
+    end
+
+    opts = Util.cond_put(true, opts, %{asdf: :asdf})
+
+    {:ok, opts}
+  end
+
+  setup context do
+    #IO.inspect(context)
+    {:ok, context}
+  end
+
   test "unique append" do
     assert [1] == unique_append([], 1)
     assert [1] == unique_append([1], 1)
   end
 
-  test "joining" do
+  @tag :bus
+  test "joining", %{bus: bus} do
     ref = {self(), nil}
-    {:next_state, state, %{players: new_players}, _} = handle_event({:call, ref}, :join, :waiting, %{players: []})
-    assert :waiting == state
+
+    {:keep_state, %{players: new_players}, _} = handle_event({:call, ref}, :join, :waiting, %{bus: bus, players: []})
     assert new_players == [self()]
 
     # no double join
-    {:next_state, state, %{players: new_players}, _} = handle_event({:call, ref}, :join, :waiting, %{players: new_players})
+    {:keep_state, %{players: new_players}, _} = handle_event({:call, ref}, :join, :waiting, %{bus: bus, players: new_players})
 
-    assert state == :waiting
     assert new_players == [self()]
   end
 
@@ -50,31 +80,40 @@ defmodule GameServerTest do
     refute_receive({:proxy, _, _})
   end
 
-  test "premature starting" do
-    {:ok, sup} = GameServer.Supervisor.start_link([])
-    server = GameServer.Supervisor.get_game(sup)
+  @tag :server
+  test "premature starting", %{server: server} do
+    # {:ok, sup} = GameServer.Supervisor.start_link([])
+    #server = GameServer.Supervisor.get_game(sup)
     assert :ok = GameServer.join(server)
 
     assert {:error, _} = GameServer.begin(server)
   end
 
-  test "starting the game" do
-    {:ok, sup} = GameServer.Supervisor.start_link([])
-    server = GameServer.Supervisor.get_game(sup)
-    {:ok, proxy} = Proxy.start_link(self())
-
+  @tag :server
+  @tag :proxy
+  test "starting the game", %{bus: bus, server: server, proxy: proxy} do
+    EventBus.subscribe(bus)
     assert :ok = GameServer.join(server)
-
-    assert {:ok, :ok} = Proxy.exec(proxy, Util.thunk(GameServer.join(server)))
-
-    assert :ok = GameServer.begin(server)
 
     me = self()
 
-    assert_receive({:game_begin, ^me, index1})
-    assert_receive({:proxy, ^proxy, {:game_begin, ^proxy, index2}})
+    assert_receive {:player_join, ^me}
+    assert_receive {:proxy, ^proxy, {:player_join, ^me}}
 
-    assert index1 != index2
+    assert {:ok, :ok} = Proxy.exec(proxy, Util.thunk(GameServer.join(server)))
+
+    assert_receive {:player_join, ^proxy}
+    assert_receive {:proxy, ^proxy, {:player_join, ^proxy}}
+
+    assert :ok = GameServer.begin(server)
+
+    assert_receive({:game_begin, mapping})
+    assert_receive({:proxy, ^proxy, {:game_begin, ^mapping}})
+
+    assert mapping[me] != mapping[proxy]
+
+    assert_receive({:gamestate, state})
+    assert_receive({:proxy, ^proxy, {:gamestate, ^state}})
   end
 end
 

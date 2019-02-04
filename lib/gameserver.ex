@@ -21,14 +21,15 @@ defmodule GameServer.Supervisor do
   def children() do
     me = self()
     [
-      %{id: :gen_event, start: {:gen_event, :start_link, []}},
+      EventBus,
+      BusPrinter,
       {GameServer, [me]},
       {Task, fn -> after_init(me) end}
     ]
   end
 
   def get_bus(pid) do
-    find_worker(pid, :gen_event)
+    find_worker(pid, EventBus)
   end
 
   def get_game(pid) do
@@ -45,7 +46,8 @@ defmodule GameServer.Supervisor do
 
   def after_init(sup) do
     bus = get_bus(sup)
-    :gen_event.add_handler(bus, BusPrinter, [])
+    printer = find_worker(sup, BusPrinter)
+    EventBus.subscribe_link(bus, printer)
   end
 
   def init(_) do
@@ -56,38 +58,19 @@ defmodule GameServer.Supervisor do
 end
 
 defmodule BusPrinter do
-  @behaviour :gen_event
+  use GenServer
+
+  def start_link(_) do
+    GenServer.start_link(__MODULE__, [nil])
+  end
 
   def init(_) do
     {:ok, nil}
   end
 
-  def handle_call(request, state) do
-    IO.inspect({self(), :call, request})
-    {:ok, :ok, state}
-  end
-
-  def handle_event(event, state) do
-    IO.inspect({self(), :event, event})
-    {:ok, state}
-  end
-end
-
-defmodule BusProxy do
-  @behaviour :gen_event
-
-  def init(forward) do
-    {:ok, forward}
-  end
-
-  def handle_call(request, forward) do
-    send(forward, {:bus_proxy, :call, self(), request})
-    {:ok, :ok, forward}
-  end
-
-  def handle_event(event, forward) do
-    send(forward, {:bus_proxy, :event, self(), event})
-    {:ok, forward}
+  def handle_info(message, state) do
+    IO.inspect({self(), :message, message})
+    {:noreply, state}
   end
 end
 
@@ -104,7 +87,7 @@ defmodule GameServer do
   end
 
   @behaviour :gen_statem
-  def callback_mode(), do: :handle_event_function
+  def callback_mode(), do: [:handle_event_function, :state_enter]
 
 
   def start_link(opts) do
@@ -137,10 +120,12 @@ defmodule GameServer do
 
   # Waiting state
 
-  def handle_event({:call, from}, :join, :waiting, %{players: players} = data) do
+  def handle_event({:call, from}, :join, :waiting, %{players: players, bus: bus} = data) do
     {pid, _} = from
 
-    {:next_state, :waiting,
+    EventBus.notify(bus, {:player_join, pid})
+
+    {:keep_state,
      %{data | players: unique_append(players, pid)},
      [{:reply, from, :ok}]
     }
@@ -148,14 +133,14 @@ defmodule GameServer do
 
   def handle_event(:cast, :debug, state, data) do
     IO.inspect({:cast, :debug, state, data})
-    {:next_state, :waiting, data}
+    {:keep_state, data}
   end
 
   def handle_event({:call, from}, :begin, :waiting, %{players: players} = data) when length(players) < @min_players do
-    {:next_state, :waiting, data, [{:reply, from, {:error, :not_enough_players}}]}
+    {:keep_state, data, [{:reply, from, {:error, :not_enough_players}}]}
   end
 
-  def handle_event({:call, from}, :begin, :waiting, %{players: players}) do
+  def handle_event({:call, from}, :begin, :waiting, %{players: players, bus: bus} = data) do
     pid_index = players
     |> Enum.with_index()
     |> Enum.into(%{})
@@ -164,16 +149,50 @@ defmodule GameServer do
     |> Enum.map(fn {a, b} -> {b, a} end)
     |> Enum.into(%{})
 
-    for {pid, index} <- pid_index do
-      send(pid, {:game_begin, pid, index})
-    end
+    EventBus.notify(bus, {:game_begin, pid_index})
 
-    {:next_state, :playing,
-     %{pid_index: pid_index, index_pid: index_pid}, # todo actually start game
+    newdata = Map.merge(data, %{pid_index: pid_index, index_pid: index_pid})
+
+    {:next_state, :starting,
+     newdata, # todo actually start game
      [{:reply, from, :ok}]}
   end
 
+  def handle_event(:enter, _, :starting, %{bus: bus, players: players} = data) do
+    gamestate = GameState.new_game(length(players))
+
+    EventBus.notify(bus, {:gamestate, gamestate})
+
+    {:new_state, {:playing, 0}, Map.put(data, :gamestate, gamestate), []}
+  end
+
+  # Playing state
+
+  def handle_event(:enter, _, {:playing, n} = state, %{bus: bus, gamestate: gamestate} = data) do
+    {gamestate, newstate} = case GameState.tick(gamestate) do
+      {:ok, newstate, :ready} -> {newstate, {:playing, n}}
+      {:ok, newstate, :requiresplay} -> {newstate, {:playing, n}}
+      {:ok, newstate} -> {newstate, {:playing, n + 1}}
+    end
+
+    EventBus.notify(bus, {:gamestate, newstate})
+
+    data = %{data | gamestate: gamestate}
+
+    if newstate == state do
+      {:keep_state, data, []}
+    else
+      {:new_state, newstate, data, []}
+    end
+  end
+
   # Any state
+
+
+  def handle_event(:enter, oldstate, newstate, _) do
+    IO.inspect({self(), :state_change, oldstate, newstate})
+    {:keep_state_and_data, []}
+  end
 
   def terminate(reason, state, data) do
     IO.inspect({:termination, self(), {reason, state, data}})
