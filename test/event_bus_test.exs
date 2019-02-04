@@ -90,4 +90,16 @@ defmodule EventBusTest do
 
     assert_receive(:message)
   end
+
+  test "don't receive duplicates" do
+    {:ok, bus} = EventBus.start_link()
+
+    EventBus.subscribe(bus)
+    EventBus.subscribe(bus)
+
+    EventBus.notify(bus, :test)
+
+    assert_receive(:test)
+    refute_receive(_)
+  end
 end

@@ -80,6 +80,8 @@ defmodule EventBus do
   end
 
   def handle_cast({:notify, msg}, set) do
+    #IO.inspect({:notify, msg})
+
     # Prevent preemption during broadcast
     # See http://groups.google.com/group/erlang-programming/browse_thread/thread/1931368998000836/b325e869a3eea26a
     oldpriority = Process.flag(:priority, :high)
