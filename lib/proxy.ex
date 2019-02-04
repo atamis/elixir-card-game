@@ -71,8 +71,8 @@ defmodule Proxy do
   end
 
   def handle_call({:exec, fun}, _from, forward) do
-    fun.()
-    {:reply, {:ok, fun.()}, forward}
+    ret = fun.()
+    {:reply, {:ok, ret}, forward}
   end
 
   def handle_info(msg, forward) do
