@@ -103,7 +103,7 @@ defmodule GameStateTest do
 
     test "default dispatch", %{state1: state1, state2: state2} do
 
-      {:ok, end_state} = GameState.tick(state1)
+      {:ok, end_state, :continue} = GameState.tick(state1)
 
       assert state2 == end_state
     end
@@ -117,18 +117,34 @@ defmodule GameStateTest do
     end
 
     test "raw function dispatch", %{state1: state1, state2: state2} do
-      assert {:ok, state2} == GameState.tick(state1, fn _, _ -> state2 end)
+      assert {:ok, state2, :continue} == GameState.tick(state1, fn _, _ -> state2 end)
     end
     
     test "module function tuple dispatch", %{state1: state1, state2: state2} do
-      assert {:ok, state2} == GameState.tick(state1, {DefaultCards, :handle_card})
+      assert {:ok, state2, :continue} == GameState.tick(state1, {DefaultCards, :handle_card})
     end
 
     test "genserver dispatch", %{state1: state1, state2: state2} do
       {:ok, pid} = GameStateTest.DispatchTest.start_link(state2)
-      assert {:ok, state2} == GameState.tick(state1, pid)
+      assert {:ok, state2, :continue} == GameState.tick(state1, pid)
     end
 
+  end
+
+  test "hand play" do
+    state1 = %{
+      players: %{0 => %{hand: [%{name: :draw}]}},
+      play_area: [],
+      current: 0,
+    }
+
+    state2 = %{
+      players: %{0 => %{hand: []}},
+      play_area: [%{name: :draw}],
+      current: 0,
+    }
+
+    assert state2 == GameState.hand_play(state1, 0)
   end
 
 end

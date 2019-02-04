@@ -70,13 +70,25 @@ defmodule GameState do
   def tick(state, dispatch) do
     case Lens.view(state, @topplay) do
       :requires_play -> {:ok, state, :requires_play}
-      card -> {:ok, card_dispatch(state, card, dispatch)}
+      card -> {:ok, card_dispatch(state, card, dispatch), :continue}
     end
   end
 
   def tick(%{play_area: [:requires_play | _]} = state, card, dispatch) do
     state = Lens.set(state, @topplay, card)
     tick(state, dispatch)
+  end
+
+  @doc """
+  Play a card from the current player's hand.
+  """
+  def hand_play(state, index) do
+    {card, state} = Lens.get_update(state,
+      [:players, {:dynamic, :current}, :hand],
+      &(List.pop_at(&1, index))
+    )
+
+    Lens.map(state, [:play_area], &(push(&1, card)))
   end
 
   @doc """
