@@ -74,8 +74,30 @@ defmodule BusPrinter do
   end
 end
 
+defmodule TestServer do
+  @behaviour :gen_statem
+  def callback_mode(), do: [:handle_event_function, :state_enter]
+  def start_link(opts) do
+    :gen_statem.start_link(__MODULE__, opts, [])
+  end
+
+  def init(_) do
+    {:ok, {:waiting, 0}, %{}}
+  end
+
+  def handle_event(:state_timeout, :tick, {:waiting, n}, data) do
+    {:next_state, {:waiting, n + 1}, data}
+  end
+
+  def handle_event(type, message, {:waiting, n} = state, data) do
+    IO.inspect({__MODULE__, {type, message, state, data}})
+    {:keep_state, data, [{:state_timeout, 1000, :tick}]}
+  end
+end
+
 defmodule GameServer do
   @min_players 2
+  @tick_timeout 1000
 
   def child_spec(args) do
     %{id: __MODULE__,
@@ -104,6 +126,10 @@ defmodule GameServer do
 
   def begin(pid) do
     :gen_statem.call(pid, :begin)
+  end
+
+  def hand_play(pid, index) do
+    :gen_statem.call(pid, {:hand_play, index})
   end
 
   # Callbacks
@@ -153,37 +179,46 @@ defmodule GameServer do
 
     newdata = Map.merge(data, %{pid_index: pid_index, index_pid: index_pid})
 
-    {:next_state, :starting,
-     newdata, # todo actually start game
-     [{:reply, from, :ok}]}
-  end
-
-  def handle_event(:enter, _, :starting, %{bus: bus, players: players} = data) do
     gamestate = GameState.new_game(length(players))
 
     EventBus.notify(bus, {:gamestate, gamestate})
 
-    {:new_state, {:playing, 0}, Map.put(data, :gamestate, gamestate), []}
+    {:next_state, {:playing, 0},
+     Map.put(newdata, :gamestate, gamestate),
+     [{:reply, from, :ok}]}
   end
 
   # Playing state
 
   def handle_event(:enter, _, {:playing, n} = state, %{bus: bus, gamestate: gamestate} = data) do
-    {gamestate, newstate} = case GameState.tick(gamestate) do
-      {:ok, newstate, :ready} -> {newstate, {:playing, n}}
-      {:ok, newstate, :requiresplay} -> {newstate, {:playing, n}}
-      {:ok, newstate} -> {newstate, {:playing, n + 1}}
-    end
+    {:ok, gamestate, outcome} = GameState.tick(gamestate)
 
-    EventBus.notify(bus, {:gamestate, newstate})
+    nextaction = case outcome do
+                 :ready -> :wait
+                 :requiresplay -> :wait
+                 :continue -> :tick
+               end
+
+    EventBus.notify(bus, {:gamestate, gamestate})
 
     data = %{data | gamestate: gamestate}
 
-    if newstate == state do
-      {:keep_state, data, []}
-    else
-      {:new_state, newstate, data, []}
-    end
+    actions = case nextaction do
+                :wait -> []
+                :tick -> [{:state_timeout, @tick_timeout, :tick}]
+              end
+
+    {:keep_state, data, actions}
+  end
+
+  def handle_event(:state_timeout, :tick, {:waiting, n}, data) do
+    {:next_state, {:waiting, n + 1}, data, []}
+  end
+
+  def handle_event({:call, from}, {:hand_play, index}, {:playing, n}, data) do
+    data = Lens.map(data, :gamestate, &(GameState.hand_play(&1, index)))
+
+    {:next_state, {:playing, n + 1}, data, [{:reply, from, :ok}]}
   end
 
   # Any state

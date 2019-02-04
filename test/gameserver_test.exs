@@ -114,6 +114,11 @@ defmodule GameServerTest do
 
     assert_receive({:gamestate, state})
     assert_receive({:proxy, ^proxy, {:gamestate, ^state}})
+
+    GameServer.hand_play(server, 0)
+
+    assert_receive({:gamestate, state})
+    assert_receive({:proxy, ^proxy, {:gamestate, ^state}})
   end
 end
 
