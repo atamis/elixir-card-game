@@ -1,22 +1,22 @@
 defmodule GameState do
-  import Lens
   require Util
 
-  @empty_state %{players: %{},
-                 current: %{},
-                 num_players: 0,
-                 play_area: [],
-                 deck: [],
-                 discard: []}
+  # @empty_state %{players: %{},
+  #                current: %{},
+  #                num_players: 0,
+  #                play_area: [],
+  #                deck: [],
+  #                discard: []}
 
-  @default_player %{hand: []}
+  # @default_player %{hand: []}
 
+  # Example GameState lenses.
   @deck [:deck]
   @players [:players]
   @discard [:discard]
-  @topdeck @deck ++ [0]
+  # @topdeck @deck ++ [0]
   @topplay [:play_area, 0]
-  @current_player @players ++ [{:dynamic, :current}]
+  # @current_player @players ++ [{:dynamic, :current}]
   @hand_size 5
 
   def nth_player_lens(n), do: @players ++ [n]

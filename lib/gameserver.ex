@@ -89,7 +89,7 @@ defmodule TestServer do
     {:next_state, {:waiting, n + 1}, data}
   end
 
-  def handle_event(type, message, {:waiting, n} = state, data) do
+  def handle_event(type, message, state, data) do
     IO.inspect({__MODULE__, {type, message, state, data}})
     {:keep_state, data, [{:state_timeout, 1000, :tick}]}
   end
@@ -190,7 +190,7 @@ defmodule GameServer do
 
   # Playing state
 
-  def handle_event(:enter, _, {:playing, n} = state, %{bus: bus, gamestate: gamestate} = data) do
+  def handle_event(:enter, _, {:playing, _}, %{bus: bus, gamestate: gamestate} = data) do
     {:ok, gamestate, outcome} = GameState.tick(gamestate)
 
     nextaction = case outcome do
