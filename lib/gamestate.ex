@@ -20,6 +20,15 @@ defmodule GameState do
 
   def nth_player_lens(n), do: @players ++ [n]
 
+  def default_deck() do
+    Stream.repeatedly(Util.thunk(%{name: :draw}))
+    |> Stream.take(100)
+    |> Enum.to_list()
+
+  end
+
+  def new_game(num_players), do: new_game(num_players, default_deck())
+
   def new_game(num_players, deck, hand_size \\ @hand_size) do
     deck = Enum.shuffle(deck)
     all_hands = Enum.chunk_every(deck, hand_size)
